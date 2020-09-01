@@ -20,19 +20,25 @@ struct TwitterOAuthController: RouteCollection {
     }
     
     func oauth(req: Request) throws -> EventLoopFuture<Response> {
-        let consumerKey = self.consumerKey ?? ""
-        let consumerSecret = self.consumerSecret ?? ""
+        guard let consumerKey = self.consumerKey, let consumerSecret = self.consumerSecret else {
+            return req.eventLoop.future(error: Abort(.internalServerError))
+        }
         let callbackURL = URL(string: "https://twitter.mainasuk.com/oauth/callback")!
         
         let headers: HTTPHeaders = {
             var headers = HTTPHeaders()
-            headers.add(name: .authorization, value: TwitterOAuthController.authorizationHeader(consumerKey: consumerKey, consumerSecret: consumerSecret, callbackURL: callbackURL))
+            let value = TwitterOAuthController.authorizationHeader(callback: callbackURL, consumerKey: consumerKey, consumerSecret: consumerSecret)
+            headers.add(name: "Authorization", value: value)
             return headers
         }()
         
         return req.client
-            .post("https://api.twitter.com/oauth/request_token", headers: headers)
+            .post("https://api.twitter.com/oauth/request_token", headers: headers) { request in
+                try! request.query.encode(RequestTokenParameter(oauthCallback: callbackURL.absoluteString.urlEncodedString()))
+                print(request)
+            }
             .flatMapThrowing { response  in
+                print(response)
                 guard response.status == .ok else {
                     throw Abort(.badRequest, reason: "Twitter OAuth request token request failed.")
                 }
@@ -57,6 +63,13 @@ struct TwitterOAuthController: RouteCollection {
 }
 
 extension TwitterOAuthController {
+    struct RequestTokenParameter: Codable {
+        let oauthCallback: String
+        
+        enum CodingKeys: String, CodingKey {
+            case oauthCallback = "oauth_callback"
+        }
+    }
     struct RequestToken: Codable {
         let oauthToken: String
         let oauthTokenSecret: String
@@ -71,20 +84,18 @@ extension TwitterOAuthController {
 }
 
 extension TwitterOAuthController {
-    private static func authorizationHeader(consumerKey: String, consumerSecret: String, callbackURL: URL, oauthToken: String? = nil) -> String {
+    private static func authorizationHeader(callback url: URL, consumerKey: String, consumerSecret: String, oauthToken: String? = nil, oauthTokenSecret: String? = nil) -> String {
         var authorizationParameters = Dictionary<String, String>()
-        authorizationParameters["oauth_callback"] = "oob"
+        authorizationParameters["oauth_callback"] = url.absoluteString.urlEncodedString()
+        authorizationParameters["oauth_consumer_key"] = consumerKey
         authorizationParameters["oauth_version"] = "1.0"
         authorizationParameters["oauth_signature_method"] = "HMAC-SHA1"
-        authorizationParameters["oauth_consumer_key"] = consumerKey
         authorizationParameters["oauth_timestamp"] = String(Int(Date().timeIntervalSince1970))
         authorizationParameters["oauth_nonce"] = UUID().uuidString
         
-        if let oauth_token = oauthToken {
-            authorizationParameters["oauth_token"] = oauth_token
-        }
+        authorizationParameters["oauth_token"] = oauthToken
         
-        authorizationParameters["oauth_signature"] = self.oauthSignature(callbackURL: callbackURL, consumerSecret: consumerSecret, parameters: authorizationParameters)
+        authorizationParameters["oauth_signature"] = oauthSignature(callback: url, consumerSecret: consumerSecret, parameters: authorizationParameters, oauthTokenSecret: oauthTokenSecret)
         
         let authorizationParameterComponents = authorizationParameters.urlEncodedQueryString(using: .utf8).components(separatedBy: "&").sorted()
         
@@ -99,19 +110,19 @@ extension TwitterOAuthController {
         return "OAuth " + headerComponents.joined(separator: ", ")
     }
     
-    private static func oauthSignature(callbackURL: URL, consumerSecret: String, parameters: Dictionary<String, String>) -> String {
-        let tokenSecret = ""    // accessTokenSecret
-        let encodedConsumerSecret = consumerSecret.urlEncodedString()
+    private static func oauthSignature(callback url: URL, consumerSecret: String, parameters: Dictionary<String, String>, oauthTokenSecret: String?) -> String {
+        let encodedConsumerSecret = consumerSecret
+        let tokenSecret = oauthTokenSecret ?? ""
         let signingKey = "\(encodedConsumerSecret)&\(tokenSecret)"
         let parameterComponents = parameters.urlEncodedQueryString(using: .utf8).components(separatedBy: "&").sorted()
         let parameterString = parameterComponents.joined(separator: "&")
         let encodedParameterString = parameterString.urlEncodedString()
-        let encodedURL = callbackURL.absoluteString.urlEncodedString()
+        let encodedURL = url.absoluteString.urlEncodedString()
         let signatureBaseString = "POST&\(encodedURL)&\(encodedParameterString)"
         
         let key = signingKey.data(using: .utf8)!
         let msg = signatureBaseString.data(using: .utf8)!
         let sha1 = HMAC.sha1(key: key, message: msg)!
-        return sha1.base64EncodedString(options: [])
+        return sha1.base64EncodedString()
     }
 }
