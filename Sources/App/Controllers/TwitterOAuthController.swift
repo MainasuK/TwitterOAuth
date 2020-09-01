@@ -34,6 +34,7 @@ struct TwitterOAuthController: RouteCollection {
         
         return req.client
             .post("https://api.twitter.com/oauth/request_token", headers: headers) { request in
+                request.headers.contentType = .urlEncodedForm
                 try! request.query.encode(RequestTokenParameter(oauthCallback: callbackURL.absoluteString.urlEncodedString()))
                 print(request)
             }
@@ -55,9 +56,9 @@ struct TwitterOAuthController: RouteCollection {
             }
     }
     
-    func callback(req: Request) throws -> EventLoopFuture<Response> {
+    func callback(req: Request) throws -> EventLoopFuture<HTTPStatus> {
         print(req.content)
-        return req.eventLoop.future(Response())
+        return req.eventLoop.future(.ok)
     }
     
 }
