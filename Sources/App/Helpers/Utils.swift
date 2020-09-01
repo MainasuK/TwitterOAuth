@@ -13,11 +13,6 @@ extension String {
     var urlEncoded: String {
         let customAllowedSet = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
         return self.addingPercentEncoding(withAllowedCharacters: customAllowedSet)!
-        var set = CharacterSet()
-        set.formUnion(.letters)
-        set.formUnion(.decimalDigits)
-        set.formUnion(CharacterSet(charactersIn: "-._~"))
-        return self.addingPercentEncoding(withAllowedCharacters: set)!
     }
     
 }
