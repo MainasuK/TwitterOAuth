@@ -187,7 +187,8 @@ extension TwitterOAuthController {
             case oauthToken = "oauth_token"
             case oauthTokenSecret = "oauth_token_secret"
             case screenName = "screen_name"
-        }    }
+        }
+    }
     
 }
 
