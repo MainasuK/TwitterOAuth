@@ -7,6 +7,7 @@
 
 import Fluent
 import Vapor
+import Crypto
 
 struct TwitterOAuthController: RouteCollection {
     
@@ -156,11 +157,14 @@ extension TwitterOAuthController {
         let encodedURL = url.absoluteString.urlEncoded
         
         let signatureBaseString = "POST&\(encodedURL)&\(encodedParameterString)"
+        let message = Data(signatureBaseString.utf8)
         
-        let key = signingKey.data(using: .utf8)!
-        let msg = signatureBaseString.data(using: .utf8)!
+        let key = SymmetricKey(data: Data(signingKey.utf8))
+        var hmac: HMAC<Insecure.SHA1> = HMAC(key: key)
+        hmac.update(data: message)
+        let mac = hmac.finalize()
         
-        let sha1 = HMAC.sha1(key: key, message: msg)!
-        return sha1.base64EncodedString(options: [])
+        let base64EncodedMac = Data(mac).base64EncodedString()
+        return base64EncodedMac
     }
 }

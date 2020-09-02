@@ -102,7 +102,7 @@
       },
       {
         "package": "swift-crypto",
-        "repositoryURL": "https://github.com/apple/swift-crypto.git",
+        "repositoryURL": "https://github.com/apple/swift-crypto",
         "state": {
           "branch": null,
           "revision": "9b9d1868601a199334da5d14f4ab2d37d4f8d0c5",
