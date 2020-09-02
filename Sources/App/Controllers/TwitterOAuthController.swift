@@ -127,6 +127,7 @@ struct TwitterOAuthController: RouteCollection {
                         urlComponents.queryItems = [
                             URLQueryItem(name: "oauth_token", value: accessToken.oauthToken),
                             URLQueryItem(name: "oauth_token_secret", value: accessToken.oauthTokenSecret),
+                            URLQueryItem(name: "user_id", value: accessToken.userID),
                             URLQueryItem(name: "screen_name", value: accessToken.screenName),
                             URLQueryItem(name: "consumer_key", value: TwitterOAuthController.consumerKey),
                             URLQueryItem(name: "consumer_secret", value: TwitterOAuthController.consumerSecret),
@@ -183,11 +184,13 @@ extension TwitterOAuthController {
     struct AccessToken: Codable {
         let oauthToken: String
         let oauthTokenSecret: String
+        let userID: String
         let screenName: String
         
         enum CodingKeys: String, CodingKey {
             case oauthToken = "oauth_token"
             case oauthTokenSecret = "oauth_token_secret"
+            case userID = "user_id"
             case screenName = "screen_name"
         }
     }
