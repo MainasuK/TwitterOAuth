@@ -123,11 +123,13 @@ struct TwitterOAuthController: RouteCollection {
                     
                     let accessToken = try URLEncodedFormDecoder().decode(AccessToken.self, from: bodyContent)
                     let url: URL = {
-                        var urlComponents = URLComponents(string: "twidere://autentication")!
+                        var urlComponents = URLComponents(string: "twidere://authentication")!
                         urlComponents.queryItems = [
                             URLQueryItem(name: "oauth_token", value: accessToken.oauthToken),
                             URLQueryItem(name: "oauth_token_secret", value: accessToken.oauthTokenSecret),
                             URLQueryItem(name: "screen_name", value: accessToken.screenName),
+                            URLQueryItem(name: "consumer_key", value: TwitterOAuthController.consumerKey),
+                            URLQueryItem(name: "consumer_secret", value: TwitterOAuthController.consumerSecret),
                         ]
                         return urlComponents.url!
                     }()
