@@ -36,7 +36,7 @@ struct TwitterOAuthController: RouteCollection {
         grouped.get("callback", use: callback)
     }
     
-    func oauth(req: Request) throws -> EventLoopFuture<Response> {
+    func oauth(req: Request) throws -> EventLoopFuture<RequestToken> {
         let requestURL = TwitterOAuthController.requestTokenURL
         let headers: HTTPHeaders = {
             var headers = HTTPHeaders()
@@ -61,29 +61,32 @@ struct TwitterOAuthController: RouteCollection {
             .flatMapThrowing { response  in
                 print(response)
                 guard response.status == .ok else {
-                    throw Abort(.badRequest, reason: "Twitter OAuth request token request failed.")
+                    throw Abort(.badRequest, reason: "OAuth token request failed.")
                 }
                 
                 do {
                     let bodyContent = response.body.flatMap {
                         $0.getString(at: $0.readerIndex, length: $0.readableBytes)
                     } ?? ""
+                    
                     let requestToken = try URLEncodedFormDecoder().decode(RequestToken.self, from: bodyContent)
-                    var urlComponents = URLComponents(string: "https://api.twitter.com/oauth/authorize")!
-                    urlComponents.queryItems = [
-                        URLQueryItem(name: "oauth_token", value: requestToken.oauthToken),
-                    ]
-                    return req.redirect(to: urlComponents.url!.absoluteString)
+                    return requestToken
                     
                 } catch {
-                    throw Abort(.badRequest, reason: "Twitter OAuth request token response decode failed. \(error.localizedDescription)")
+                    throw Abort(.badRequest, reason: "OAuth token request failed.. \(error.localizedDescription)")
                 }
             }
     }
     
     func callback(req: Request) throws -> EventLoopFuture<HTTPStatus> {
-        print(req.content)
-        return req.eventLoop.future(.ok)
+        do {
+            let query = try req.query.decode(CallbackQuery.self)
+            print(req.content)
+            return req.eventLoop.future(.ok)
+            
+        } catch {
+            throw Abort(.unauthorized)
+        }
     }
     
 }
@@ -96,7 +99,10 @@ extension TwitterOAuthController {
             case oauthCallback = "oauth_callback"
         }
     }
-    struct RequestToken: Codable {
+    
+    struct RequestToken: Content {
+        static let defaultContentType: HTTPMediaType = .json
+
         let oauthToken: String
         let oauthTokenSecret: String
         let oauthCallbackConfirmed: Bool
@@ -107,6 +113,16 @@ extension TwitterOAuthController {
             case oauthCallbackConfirmed = "oauth_callback_confirmed"
         }
     }
+    
+    struct CallbackQuery: Codable {
+        let oauthToken: String
+        let oauthVerifier: String
+        enum CodingKeys: String, CodingKey {
+            case oauthToken = "oauth_token"
+            case oauthVerifier = "oauth_verifier"
+        }
+    }
+    
 }
 
 extension TwitterOAuthController {
