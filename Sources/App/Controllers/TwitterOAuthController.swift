@@ -73,16 +73,71 @@ struct TwitterOAuthController: RouteCollection {
                     return requestToken
                     
                 } catch {
-                    throw Abort(.badRequest, reason: "OAuth token request failed.. \(error.localizedDescription)")
+                    throw Abort(.badRequest, reason: "OAuth token request failed. \(error.localizedDescription)")
                 }
             }
     }
     
-    func callback(req: Request) throws -> EventLoopFuture<HTTPStatus> {
+    func callback(req: Request) throws -> EventLoopFuture<Response> {
         do {
             let query = try req.query.decode(CallbackQuery.self)
-            print(req.content)
-            return req.eventLoop.future(.ok)
+            print(query)
+            
+            let requestURL = TwitterOAuthController.accessTokenURL
+            let headers: HTTPHeaders = {
+                var headers = HTTPHeaders()
+                let authorizationHeader = TwitterOAuthController.authorizationHeader(
+                    requestURL: requestURL,
+                    callbackURL: TwitterOAuthController.callbackURL,
+                    consumerKey: TwitterOAuthController.consumerKey,
+                    consumerSecret: TwitterOAuthController.consumerSecret,
+                    oauthToken: query.oauthToken,
+                    oauthTokenSecret: nil
+                )
+                headers.add(name: "Authorization", value: authorizationHeader)
+                return headers
+            }()
+            let uri: URI = {
+                var urlComponents = URLComponents(string: requestURL.absoluteString)!
+                urlComponents.queryItems = [
+                    URLQueryItem(name: "oauth_token", value: query.oauthToken),
+                    URLQueryItem(name: "oauth_verifier", value: query.oauthVerifier)
+                ]
+                return URI(string: urlComponents.url!.absoluteString)
+            }()
+            
+            return req.client.post(uri, headers: headers) { request in
+                request.headers.contentType = .urlEncodedForm
+                print(request)
+            }
+            .flatMapThrowing { response -> Response in
+                print(response)
+                guard response.status == .ok else {
+                    throw Abort(.badRequest, reason: "OAuth access token exchange failed.")
+                }
+                
+                do {
+                    let bodyContent = response.body.flatMap {
+                        $0.getString(at: $0.readerIndex, length: $0.readableBytes)
+                    } ?? ""
+                    
+                    let accessToken = try URLEncodedFormDecoder().decode(AccessToken.self, from: bodyContent)
+                    let url: URL = {
+                        var urlComponents = URLComponents(string: "twidere://autentication")!
+                        urlComponents.queryItems = [
+                            URLQueryItem(name: "oauth_token", value: accessToken.oauthToken),
+                            URLQueryItem(name: "oauth_token_secret", value: accessToken.oauthTokenSecret),
+                            URLQueryItem(name: "screen_name", value: accessToken.screenName),
+                        ]
+                        return urlComponents.url!
+                    }()
+                    
+                    return req.redirect(to: url.absoluteString)
+                    
+                } catch {
+                    throw Abort(.badRequest, reason: "OAuth access token exchange failed. \(error.localizedDescription)")
+                }
+            }
             
         } catch {
             throw Abort(.unauthorized)
@@ -122,6 +177,17 @@ extension TwitterOAuthController {
             case oauthVerifier = "oauth_verifier"
         }
     }
+    
+    struct AccessToken: Codable {
+        let oauthToken: String
+        let oauthTokenSecret: String
+        let screenName: String
+        
+        enum CodingKeys: String, CodingKey {
+            case oauthToken = "oauth_token"
+            case oauthTokenSecret = "oauth_token_secret"
+            case screenName = "screen_name"
+        }    }
     
 }
 
